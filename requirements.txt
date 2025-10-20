@@ -21,3 +21,6 @@ tzlocal==5.3.1
 # ---- AI / text summary (if using Ollama locally only) ----
 # Comment this out on Streamlit Cloud unless the API is remote
 # ollama==0.6.0
+
+# ---- Streamlit extensions ----
+streamlit-plotly-events==0.0.6
