@@ -1,12 +1,13 @@
 import os
-from datetime import date
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import chardet
 from streamlit_plotly_events import plotly_events
+from datetime import date
 
 # -------------------------------
-# Configuration de la page
+# Page configuration
 # -------------------------------
 st.set_page_config(
     page_title="Press Release Radar",
@@ -16,34 +17,33 @@ st.set_page_config(
 )
 
 # -------------------------------
-# CSS
+# CSS Styling
 # -------------------------------
 st.markdown("""
 <style>
 body { background-color: #fafafa; }
-.sidebar .block-container {
-    width: 340px !important; /* élargit la barre latérale */
-}
+.sidebar .block-container { width: 260px !important; }  /* narrower sidebar */
+
 .metric-container {
     display: flex;
     justify-content: space-between;
-    gap: 1.2rem;
-    margin-top: 1rem;
-    margin-bottom: 2rem;
+    gap: 0.8rem;
+    margin-top: 0.5rem;
+    margin-bottom: 1rem;
 }
 .metric-card {
     flex: 1;
     background: linear-gradient(180deg, #ffffff 0%, #f8f9fb 100%);
     border: 1px solid rgba(0,0,0,0.05);
-    border-radius: 18px;
-    padding: 22px 24px;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
     text-align: center;
 }
-.metric-title { font-size: 0.95rem; color: #666; margin-bottom: 8px; font-weight: 500; }
-.metric-value { font-size: 2rem; font-weight: 600; color: #222; }
+.metric-title { font-size: 0.8rem; color: #666; margin-bottom: 4px; font-weight: 500; }
+.metric-value { font-size: 1.2rem; font-weight: 600; color: #222; }
 
-/* Carte de détails colorée et animée */
+/* Detail card */
 .detail-card {
     padding: 22px;
     border-radius: 14px;
@@ -63,37 +63,108 @@ body { background-color: #fafafa; }
 """, unsafe_allow_html=True)
 
 # -------------------------------
-# Chargement du CSV
+# Load CSV
 # -------------------------------
 @st.cache_data(show_spinner=False)
 def load_data():
     csv_path = os.path.join(os.path.dirname(__file__), "press_releases_master.csv")
+
     if not os.path.exists(csv_path):
-        st.error(f"Fichier CSV introuvable : {csv_path}")
+        st.error(f"CSV file not found: {csv_path}")
         st.stop()
-    df = pd.read_csv(csv_path)
-    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
+
+    # --- Auto-detect encoding to avoid UTF-8 decode errors ---
+    try:
+        with open(csv_path, "rb") as f:
+            raw_data = f.read(50000)
+            enc = chardet.detect(raw_data)["encoding"] or "utf-8"
+        df = pd.read_csv(csv_path, encoding=enc)
+    except Exception as e:
+        st.error(f"Error reading CSV: {e}")
+        st.stop()
+
+    #st.caption(f"✅ Loaded CSV with encoding: {enc}")
+
+    # --- Quick sanity check ---
+    if df.empty:
+        st.error("CSV file is empty.")
+        st.stop()
+
+    # --- Normalize string fields ---
+    if "company" not in df.columns:
+        st.error("No 'company' column found in CSV.")
+        st.stop()
+
+    df["company"] = df["company"].astype(str).str.strip()
+    if "title" in df.columns:
+        df["title"] = df["title"].astype(str).str.strip()
+
+    # --- Ensure date column exists ---
+    if "date" not in df.columns:
+        st.error("No 'date' column found in CSV.")
+        st.stop()
+
+    # --- Robust date normalization (multi-format merge) ---
+    df["date"] = df["date"].astype(str).str.strip()
+
+    possible_formats = [
+        "%Y-%m-%d",           # 2025-03-05
+        "%Y/%m/%d",           # 2025/03/05
+        "%b %d, %Y",          # Mar 5, 2025
+        "%B %d, %Y",          # March 5, 2025
+        "%m/%d/%Y",           # 03/05/2025
+        "%d-%b-%Y",           # 05-Mar-2025
+        "%Y-%m-%dT%H:%M:%SZ", # 2025-03-05T00:00:00Z
+    ]
+
+    # Try all formats and combine valid results
+    parsed_final = pd.Series(pd.NaT, index=df.index)
+
+    for fmt in possible_formats:
+        try:
+            parsed = pd.to_datetime(df["date"], format=fmt, errors="coerce")
+            parsed_final = parsed_final.combine_first(parsed)
+        except Exception:
+            continue
+
+    df["date"] = parsed_final.dt.date
+
+    # --- Report ---
+    invalid_dates = df["date"].isna().sum()
+    print(f"✅ Loaded {len(df)} rows; {invalid_dates} rows still unparsed (kept).")
+
+
+    # --- Clean up NaN text fields ---
+    for c in ["summary_ai", "impact_for_zhone"]:
+        if c in df.columns:
+            df[c] = df[c].astype(str).replace({"nan": "", "NaN": ""}).fillna("")
+
+    # --- Final assurance log ---
+    print("✅ load_data() executed successfully, returning dataframe.")
+    print(f"Companies found: {df['company'].unique()}")
+
+    # ✅ Always return df
     return df
 
 df = load_data()
 
 # -------------------------------
-# Filtres
+# Sidebar filters
 # -------------------------------
 with st.sidebar:
-    st.header("🔎 Filtres")
+    st.header("🔎 Filters")
 
     companies = sorted(df["company"].dropna().unique())
-    selected_companies = st.multiselect("Compagnies", companies, default=companies)
+    selected_companies = st.multiselect("Companies", companies, default=companies)
 
     valid_dates = df["date"].dropna()
     min_d, max_d = valid_dates.min(), valid_dates.max()
-    selected_range = st.date_input("Période", value=(min_d, max_d), min_value=min_d, max_value=max_d)
+    selected_range = st.date_input("Date range", value=(min_d, max_d), min_value=min_d, max_value=max_d)
 
-    query = st.text_input("Recherche texte (titre, résumé, impact)", "")
+    query = st.text_input("Search text (title, summary, impact)", "")
 
 # -------------------------------
-# Filtrage
+# Filtering
 # -------------------------------
 def filter_df(df, companies, date_range, query):
     f = df.copy()
@@ -106,19 +177,18 @@ def filter_df(df, companies, date_range, query):
         q = query.lower()
         f = f[
             f["title"].str.lower().str.contains(q, na=False)
-            | f["description"].str.lower().str.contains(q, na=False)
-            | f["summary_ai"].str.lower().str.contains(q, na=False)
-            | f["impact_for_zhone"].str.lower().str.contains(q, na=False)
+            | f.get("summary_ai", "").str.lower().str.contains(q, na=False)
+            | f.get("impact_for_zhone", "").str.lower().str.contains(q, na=False)
         ]
     return f.sort_values("date", ascending=False)
 
 filtered = filter_df(df, selected_companies, selected_range, query)
 
 # -------------------------------
-# En-tête
+# Header
 # -------------------------------
 st.title("🛰️ Press Release Radar")
-st.caption("Cliquez sur un point de la timeline pour voir les détails correspondants ci-dessous.")
+st.caption("Click a point on the timeline below to view details.")
 
 by_co = filtered.groupby("company")["id"].count().sort_values(ascending=False)
 top_co = by_co.index[0] if not by_co.empty else "—"
@@ -127,88 +197,136 @@ latest = filtered["date"].max()
 
 st.markdown(f"""
 <div class="metric-container">
-  <div class="metric-card"><div class="metric-title">Communiqués</div><div class="metric-value">{len(filtered):,}</div></div>
-  <div class="metric-card"><div class="metric-title">Top émetteur</div><div class="metric-value">{top_co}</div></div>
-  <div class="metric-card"><div class="metric-title">Plus ancien</div><div class="metric-value">{earliest if pd.notna(earliest) else '—'}</div></div>
-  <div class="metric-card"><div class="metric-title">Plus récent</div><div class="metric-value">{latest if pd.notna(latest) else '—'}</div></div>
+  <div class="metric-card"><div class="metric-title">Total Releases</div><div class="metric-value">{len(filtered):,}</div></div>
+  <div class="metric-card"><div class="metric-title">Top Company</div><div class="metric-value">{top_co}</div></div>
+  <div class="metric-card"><div class="metric-title">Earliest</div><div class="metric-value">{earliest if pd.notna(earliest) else '—'}</div></div>
+  <div class="metric-card"><div class="metric-title">Latest</div><div class="metric-value">{latest if pd.notna(latest) else '—'}</div></div>
 </div>
 """, unsafe_allow_html=True)
 
-# -------------------------------
-# Timeline interactive cliquable
-# -------------------------------
-if not filtered.empty:
-    tl = filtered.copy()
-    tl["y"] = tl["company"]
+# ==============================
+# 📈 PRESS RELEASE TIMELINE — Accurate Clicks & Hover Tooltips
+# ==============================
+st.subheader("🗓 Press Release Timeline (clickable)")
 
-    COLOR_MAP = {
-        "Calix": "#00b894",
-        "Nokia": "#0984e3",
-        "Huawei": "#d63031",
-        "Adtran": "#6c5ce7",
-    }
+# Ensure we have a unique ID for persistent mapping
+tl = filtered.copy()
+if "id" not in tl.columns:
+    tl["id"] = tl.index.astype(str)
+tl = tl.reset_index(drop=True)
 
+COLOR_MAP = {
+    "Zhone Technologies": "#ff8c00",  # orange
+    "Adtran": "#7c66ff",              # violet
+    "Nokia": "#007bff",               # blue
+    "Calix": "#00bfa6",               # teal
+}
+company_order = [c for c in ["Zhone Technologies", "Adtran", "Nokia", "Calix"]
+                 if c in tl["company"].unique()]
+
+@st.cache_data(show_spinner=False)
+def build_timeline(data):
     fig = px.scatter(
-        tl,
+        data,
         x="date",
-        y="y",
+        y="company",
         color="company",
         hover_name="title",
-        custom_data=["id"],
+        custom_data=["id"],  # real persistent ID
         color_discrete_map=COLOR_MAP,
+        category_orders={"company": company_order},
         template="plotly_white",
     )
-    fig.update_traces(marker=dict(size=12, line=dict(width=0.5, color="rgba(0,0,0,.3)")))
-    fig.update_layout(
-        title="🗓️ Timeline des communiqués (cliquable)",
-        xaxis_title="Date",
-        yaxis_title="Compagnie",
-        hovermode="closest",
-        height=420,
-        margin=dict(l=20, r=20, t=60, b=20),
-        legend_title_text="Compagnie",
+
+    fig.update_traces(
+        marker=dict(size=12, line=dict(width=0.5, color="rgba(0,0,0,.3)")),
+        hovertemplate="<span style='font-size:16px; font-weight:bold;'>%{hovertext}</span><br>"
+                      "<span style='font-size:14px;'>📅 %{x|%b %d, %Y}</span><extra></extra>",
     )
 
-    selected_points = plotly_events(fig, click_event=True, hover_event=False)
+    fig.update_layout(
+        xaxis_title="Date",
+        yaxis_title="Company",
+        showlegend=False,
+        xaxis=dict(tickfont=dict(size=14)),
+        yaxis=dict(tickfont=dict(size=14)),
+        margin=dict(l=30, r=30, t=10, b=30),
+        height=460,
+        hoverlabel=dict(
+            bgcolor="rgba(0,0,0,0.85)",
+            font_size=15,
+            font_color="white",
+            bordercolor="white"
+        ),
+    )
+    return fig
 
-    def _select_row_from_event(ev):
-        if not ev:
-            return None
-        cd = ev.get("customdata", None)
-        if cd is not None:
-            sel_id = cd[0] if isinstance(cd, (list, tuple)) else cd
-            match = filtered[filtered["id"] == sel_id]
-            if not match.empty:
-                return match.iloc[0]
-        x, y = ev.get("x", None), ev.get("y", None)
-        try:
-            x_date = pd.to_datetime(x).date() if x else None
-        except Exception:
-            x_date = None
-        subset = filtered.copy()
-        if x_date is not None:
-            subset = subset[subset["date"] == x_date]
-        if y is not None:
-            subset = subset[subset["company"] == y]
-        return subset.iloc[0] if len(subset) else None
+# Build figure once (cached)
+fig = build_timeline(tl)
 
-    row = _select_row_from_event(selected_points[0]) if selected_points else None
+# Capture hover for tooltip display, click for selection
+events = plotly_events(
+    fig,
+    click_event=True,
+    hover_event=True,
+    override_height=460,
+    key="timeline_plot"
+)
 
-    # --- Détails sous la timeline ---
-    if row is not None:
-        color = COLOR_MAP.get(row["company"], "#333")
-        st.markdown(
-            f"""
-            <div class="detail-card" style="background:{color};">
-                <h3>📄 {row['company']} — {row['title']}</h3>
-                <p><strong>Date :</strong> {row['date']}</p>
-                <p><strong>Description :</strong> {row.get('description','')}</p>
-                <p><strong>Résumé AI :</strong> {row.get('summary_ai','')}</p>
-                <p><strong>Impact pour Zhone Technologies :</strong> {row.get('impact_for_zhone','')}</p>
-                <p><a href="{row['link']}" target="_blank">🔗 Lire le communiqué complet</a></p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+#st.write("🔍 Debug event payload:", events)
+
+# =====================================
+# 🗂 DETAILED INFO — compatible with your event payload
+# =====================================
+if "selected_row" not in st.session_state:
+    st.session_state.selected_row = None
+
+clicked_row = None
+if events and isinstance(events, list) and len(events) > 0:
+    e = events[0]
+    clicked_date = str(e.get("x"))
+    clicked_company = e.get("y")
+
+    # Match by date + company
+    match = tl[
+        (tl["company"] == clicked_company)
+        & (tl["date"].astype(str) == clicked_date)
+    ]
+    if not match.empty:
+        clicked_row = match.iloc[0]
+        st.session_state.selected_row = clicked_row
+
+row = st.session_state.selected_row
+
+# =====================================
+# 🪧 DISPLAY SELECTED CARD
+# =====================================
+if row is not None:
+    company = row["company"]
+    title = row["title"]
+    date_val = row["date"]
+    link = row.get("link", "#")
+    ai = (row.get("summary_ai", "") or "").strip() or "Not available."
+    impact = (row.get("impact_for_zhone", "") or "").strip() or "Not available."
+    bg = COLOR_MAP.get(company, "#444")
+
+    st.markdown(
+        f"""
+        <div style="
+            background-color:{bg};
+            padding:20px;border-radius:12px;color:white;
+            box-shadow:0 4px 10px rgba(0,0,0,.2); margin-top:16px;
+        ">
+          <h4>📄 <b>{company} — {title}</b></h4>
+          <p><b>Date:</b> {date_val}</p>
+          <p><b>AI Summary:</b> {ai}</p>
+          <p><b>Impact for Zhone Technologies:</b> {impact}</p>
+          <a href="{link}" target="_blank" style="color:white;text-decoration:underline;">
+            🔗 Read full press release
+          </a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 else:
-    st.info("Aucun communiqué trouvé avec ces filtres.")
+    st.info("Click a bubble on the timeline to view its details below.")
