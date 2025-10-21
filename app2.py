@@ -67,7 +67,7 @@ body { background-color: #fafafa; }
 # -------------------------------
 @st.cache_data(show_spinner=False)
 def load_data():
-    csv_path = os.path.join(os.path.dirname(__file__), "press_releases_sample.csv")
+    csv_path = os.path.join(os.path.dirname(__file__), "press_releases_master.csv")
     if not os.path.exists(csv_path):
         st.error(f"Fichier CSV introuvable : {csv_path}")
         st.stop()
