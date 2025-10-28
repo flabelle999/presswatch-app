@@ -220,8 +220,9 @@ COLOR_MAP = {
     "Adtran": "#7c66ff",              # violet
     "Nokia": "#007bff",               # blue
     "Calix": "#00bfa6",               # teal
+    "Ciena": "#b95fa3",               # teal
 }
-company_order = [c for c in ["Zhone Technologies", "Adtran", "Nokia", "Calix"]
+company_order = [c for c in ["Zhone Technologies", "Adtran", "Nokia", "Calix","Ciena"]
                  if c in tl["company"].unique()]
 
 @st.cache_data(show_spinner=False)
