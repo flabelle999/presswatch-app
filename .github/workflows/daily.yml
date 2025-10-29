@@ -30,6 +30,7 @@ jobs:
           python getAdtranPRPages1To5-2025.py
           python getNokiaPRDateUpdated.py
           python getZhonePR2025.py
+          python getCienaPR2025.py
 
       - name: Run AI summarizer (Groq API)
         env:
