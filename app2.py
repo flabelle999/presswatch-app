@@ -220,9 +220,11 @@ COLOR_MAP = {
     "Adtran": "#7c66ff",              # violet
     "Nokia": "#007bff",               # blue
     "Calix": "#00bfa6",               # teal
-    "Ciena": "#b95fa3",               # teal
+    "Ciena": "#b95fa3",               # purple 
+    "Smartoptics": "#df1f39",         # red
 }
-company_order = [c for c in ["Zhone Technologies", "Adtran", "Nokia", "Calix","Ciena"]
+company_order = [c for c in ["Zhone Technologies", "Adtran", "Nokia", "Calix","Ciena","Smartoptics"]
+#company_order = [c for c in ["Zhone Technologies", "Adtran", "Nokia", "Calix","Ciena"]
                  if c in tl["company"].unique()]
 
 @st.cache_data(show_spinner=False)
@@ -318,7 +320,7 @@ if row is not None:
             padding:20px;border-radius:12px;color:white;
             box-shadow:0 4px 10px rgba(0,0,0,.2); margin-top:16px;
         ">
-          <h4>📄 <b>{company} — {title}</b></h4>
+          <h4 style="color:white;">📄 <b>{company} — {title}</b></h4>
           <p><b>Date:</b> {date_val}</p>
           <p><b>AI Summary:</b> {ai}</p>
           <p><b>Impact for Zhone Technologies:</b> {impact}</p>

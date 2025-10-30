@@ -31,6 +31,7 @@ jobs:
           python getNokiaPRDateUpdated.py
           python getZhonePR2025.py
           python getCienaPR2025.py
+          python getSmartopticsPR2025.py
 
       - name: Run AI summarizer (Groq API)
         env:
