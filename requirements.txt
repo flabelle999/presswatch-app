@@ -9,6 +9,8 @@ Flask-SQLAlchemy==3.1.1
 plotly==6.3.1
 altair==5.5.0
 chardet==5.2.0
+selenium==4.25.0
+webdriver-manager
 
 # ---- Optional visual and helper libs ----
 openpyxl==3.1.5

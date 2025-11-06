@@ -225,8 +225,9 @@ COLOR_MAP = {
     "Ekinops" : "#c2df1f",            # yellow
     "Ribbon" : "#df1faf",            # pink
     "Huawei" : "#72080d",            # brown
+    "ZTE" : "#697e20",            # brown
 }
-company_order = [c for c in ["Zhone Technologies", "Adtran", "Nokia", "Calix","Ciena","Smartoptics","Ekinops","Ribbon","Huawei"]
+company_order = [c for c in ["Zhone Technologies", "Adtran", "Nokia", "Calix","Ciena","Smartoptics","Ekinops","Ribbon","Huawei","ZTE"]
 #company_order = [c for c in ["Zhone Technologies", "Adtran", "Nokia", "Calix","Ciena"]
                  if c in tl["company"].unique()]
 
@@ -274,7 +275,7 @@ fig = build_timeline(tl)
 events = plotly_events(
     fig,
     click_event=True,
-    hover_event=True,
+    #hover_event=True,
     override_height=460,
     key="timeline_plot"
 )
