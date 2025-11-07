@@ -94,11 +94,15 @@ def main():
 
             date_str = normalize_date(date_el.get_text(strip=True))
             link = urljoin(BASE, link_el.get("href"))
-            title = link_el.get_text(strip=True)
-            if not title:
-                # fallback: try reading parent h3 or sibling
-                h3 = item.select_one("h3")
-                title = h3.get_text(strip=True) if h3 else "(No title)"
+
+            # Prefer the visible <h3 class="title"> element as the true PR title
+            h3 = item.select_one("h3.title")
+            if h3:
+                title = h3.get_text(strip=True)
+            else:
+                title = link_el.get_text(strip=True)
+                if title.lower() == "learn more" or not title:
+                    title = "(No title)"
 
             if link in seen_links:
                 continue
