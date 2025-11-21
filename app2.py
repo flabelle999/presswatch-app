@@ -3,8 +3,54 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 import chardet
+import gspread
+import json
 from streamlit_plotly_events import plotly_events
 from datetime import date
+from oauth2client.service_account import ServiceAccountCredentials
+
+# --- Google Sheets Setup (same as registration.py) ---
+with open(st.secrets["google"]["service_json_path"]) as f:
+    GOOGLE_SERVICE_JSON = json.load(f)
+
+SHEET_NAME = "PressWatch Subscribers"
+
+def get_sheet():
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_SERVICE_JSON, scope)
+    client = gspread.authorize(creds)
+    sheet = client.open(SHEET_NAME).sheet1
+    return sheet
+
+# --- Handle unsubscribe page ---
+query = st.query_params  # new Streamlit syntax
+page = query.get("page")
+email = query.get("email")
+
+if page == "unsubscribe":
+    st.title("Unsubscribe from PressWatch Weekly Digest")
+
+    if not email:
+        st.error("No email address provided in the link.")
+    else:
+        st.write(f"Email detected: **{email}**")
+        sheet = get_sheet()
+        all_emails = [row[2] for row in sheet.get_all_values()]  # assuming col C = email
+
+        if email in all_emails:
+            cell = sheet.find(email)
+            sheet.delete_rows(cell.row)
+            st.success("✅ You’ve been successfully unsubscribed.")
+        else:
+            st.warning("⚠️ This email was not found in the subscriber list.")
+
+    st.markdown(
+        "If this was a mistake, you can [resubscribe here](https://presswatch.streamlit.app/)"
+    )
+    st.stop()
 
 # -------------------------------
 # Page configuration
@@ -222,7 +268,7 @@ COLOR_MAP = {
     "Calix": "#00bfa6",               # teal
     "Ciena": "#b95fa3",               # purple 
     "Smartoptics": "#df1f39",         # red
-    "Ekinops" : "#c2df1f",            # yellow
+    "Ekinops" : "#000000",            # black
     "Ribbon" : "#df1faf",            # pink
     "Huawei" : "#72080d",            # brown
     "ZTE" : "#697e20",            # brown
