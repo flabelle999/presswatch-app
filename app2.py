@@ -9,9 +9,7 @@ from streamlit_plotly_events import plotly_events
 from datetime import date
 from oauth2client.service_account import ServiceAccountCredentials
 
-# --- Google Sheets Setup (same as registration.py) ---
-with open(st.secrets["google"]["service_json_path"]) as f:
-    GOOGLE_SERVICE_JSON = json.load(f)
+# --- Google Sheets Setup
 
 SHEET_NAME = "PressWatch Subscribers"
 
