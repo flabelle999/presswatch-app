@@ -13,6 +13,7 @@ selenium==4.25.0
 webdriver-manager
 gspread
 google-auth
+oauth2client
 
 # ---- Optional visual and helper libs ----
 openpyxl==3.1.5
