@@ -1,54 +1,125 @@
 import streamlit as st
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 import requests
 import uuid
-import os
 import json
 from datetime import datetime
 
 # ---------------------------------------------------------------------
-# 1️⃣  Load secrets
+# 1️⃣  Load configuration from Streamlit secrets
 # ---------------------------------------------------------------------
-
-with open(st.secrets["google"]["service_json_path"]) as f:
-    GOOGLE_SERVICE_JSON = json.load(f)
-#GOOGLE_SERVICE_JSON = json.loads(st.secrets["google"]["service_json"])
-#GOOGLE_SERVICE_JSON = st.secrets["google"]["service_json"]
-MAILGUN_API_KEY = st.secrets["mailgun"]["api_key"]
-MAILGUN_DOMAIN = st.secrets["mailgun"]["domain"]
-MAILGUN_FROM = st.secrets["mailgun"]["from_email"]
 
 SHEET_NAME = "PressWatch Subscribers"   # your private Google Sheet name
 
+# Microsoft Graph / Azure AD settings
+MS_TENANT_ID = st.secrets["microsoft"]["tenant_id"]
+MS_CLIENT_ID = st.secrets["microsoft"]["client_id"]
+MS_CLIENT_SECRET = st.secrets["microsoft"]["client_secret"]
+# This should be the UPN or mailbox that will send the email (e.g. "you@company.com")
+MS_FROM_USER = st.secrets["microsoft"]["from_user"]
+
+
 # ---------------------------------------------------------------------
-# 2️⃣  Google Sheet connection
+# 2️⃣  Google Sheet connection helpers
 # ---------------------------------------------------------------------
+def _get_google_service_info() -> dict:
+    """
+    Returns the service-account JSON as a dict.
+
+    - In Streamlit Cloud, you typically store the full JSON directly
+      under [google] in secrets.toml.
+    - Locally, you *may* still use a path via google.service_json_path.
+    """
+    google_secrets = st.secrets["google"]
+
+    # Optional backward-compatible path usage
+    if "service_json_path" in google_secrets:
+        with open(google_secrets["service_json_path"]) as f:
+            return json.load(f)
+    else:
+        # Streamlit Cloud: secrets["google"] already contains the JSON fields
+        return dict(google_secrets)
+
+
 def get_sheet():
     scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/drive"
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
     ]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_SERVICE_JSON, scope)
+    service_info = _get_google_service_info()
+    creds = Credentials.from_service_account_info(service_info, scopes=scope)
     client = gspread.authorize(creds)
     sheet = client.open(SHEET_NAME).sheet1
     return sheet
 
+
 # ---------------------------------------------------------------------
-# 3️⃣  Mailgun send function
+# 3️⃣  Microsoft Graph helpers (replace Mailgun)
 # ---------------------------------------------------------------------
-def send_mailgun_html(to_email: str, subject: str, html_body: str):
-    url = f"https://api.mailgun.net/v3/{MAILGUN_DOMAIN}/messages"
+def _get_ms_access_token() -> str:
+    """
+    Get an OAuth2 access token using client_credentials for Microsoft Graph.
+    Requires:
+      - tenant_id
+      - client_id
+      - client_secret
+    with Mail.Send application permission granted in Azure.
+    """
+    token_url = f"https://login.microsoftonline.com/{MS_TENANT_ID}/oauth2/v2.0/token"
+
     data = {
-        "from": MAILGUN_FROM,
-        "to": [to_email],
-        "subject": subject,
-        "html": html_body,
+        "client_id": MS_CLIENT_ID,
+        "client_secret": MS_CLIENT_SECRET,
+        "scope": "https://graph.microsoft.com/.default",
+        "grant_type": "client_credentials",
     }
-    resp = requests.post(url, auth=("api", MAILGUN_API_KEY), data=data)
-    if resp.status_code != 200:
-        st.error(f"Mailgun error: {resp.text}")
+
+    resp = requests.post(token_url, data=data)
+    try:
+        resp.raise_for_status()
+    except Exception as e:
+        st.error(f"Microsoft Graph token error: {resp.text}")
+        raise e
+
+    token_json = resp.json()
+    return token_json["access_token"]
+
+
+def send_ms_html_email(to_email: str, subject: str, html_body: str):
+    """
+    Sends an HTML email via Microsoft Graph using app-only permissions.
+
+    MS_FROM_USER should be the UPN/mailbox that is allowed to send mail,
+    for example: "presswatch-notify@yourcompany.com".
+    """
+    access_token = _get_ms_access_token()
+
+    send_url = f"https://graph.microsoft.com/v1.0/users/{MS_FROM_USER}/sendMail"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "message": {
+            "subject": subject,
+            "body": {
+                "contentType": "HTML",
+                "content": html_body,
+            },
+            "toRecipients": [
+                {"emailAddress": {"address": to_email}}
+            ],
+        },
+        "saveToSentItems": "false",
+    }
+
+    resp = requests.post(send_url, headers=headers, json=payload)
+    if resp.status_code not in (200, 202):
+        st.error(f"Microsoft Graph sendMail error ({resp.status_code}): {resp.text}")
     return resp
+
 
 # ---------------------------------------------------------------------
 # 4️⃣  HTML template for thank-you email
@@ -76,6 +147,7 @@ def build_thankyou_email(name: str):
     </html>
     """
 
+
 # ---------------------------------------------------------------------
 # 5️⃣  Streamlit registration form
 # ---------------------------------------------------------------------
@@ -92,22 +164,27 @@ def registration_form():
             st.warning("Please fill in both your name and email.")
             return
 
+        # Check if already registered
         sheet = get_sheet()
         existing = sheet.findall(email)
         if existing:
             st.info("You are already registered.")
             return
 
+        # Append new registration row
         token = str(uuid.uuid4())
         row = [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), name, email, token, "active"]
         sheet.append_row(row)
+
         st.success("Registration successful! Check your inbox for a confirmation email.")
 
+        # Send confirmation email via Microsoft Graph
         html = build_thankyou_email(name)
-        send_mailgun_html(email, "Welcome to PressWatch!", html)
+        send_ms_html_email(email, "Welcome to PressWatch!", html)
+
 
 # ---------------------------------------------------------------------
-# 6️⃣  Main entry point
+# 6️⃣  Main entry point (for local testing)
 # ---------------------------------------------------------------------
 if __name__ == "__main__":
     registration_form()
