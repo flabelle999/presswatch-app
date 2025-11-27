@@ -13,12 +13,15 @@ jobs:
     # ENV VARIABLES (GitHub secrets)
     # -------------------------------
     env:
+      PR_CSV_PATH: press_releases_master.csv
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
       MS_CLIENT_ID: ${{ secrets.MS_GRAPH_CLIENT_ID }}
       MS_TENANT_ID: ${{ secrets.MS_GRAPH_TENANT_ID }}
       MS_CLIENT_SECRET: ${{ secrets.MS_GRAPH_CLIENT_SECRET }}
       SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}          # optional
       GRAPH_SENDER_DISPLAY: ${{ secrets.GRAPH_SENDER_DISPLAY }}  # optional
+      PRESSWATCH_URL: https://flabelle999-presswatch-app-app2-ozc3e2.streamlit.app/
 
     steps:
       - name: Checkout repository
