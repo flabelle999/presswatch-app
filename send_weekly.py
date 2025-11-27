@@ -59,7 +59,7 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_URL = os.getenv("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
 
 # Options
-WINDOW_DAYS = int(os.getenv("WINDOW_DAYS", "45"))  # BRING BACK TO 7
+WINDOW_DAYS = int(os.getenv("WINDOW_DAYS", "7"))  # BRING BACK TO 7
 REQUIRE_2025_PLUS = os.getenv("REQUIRE_2025_PLUS", "false").lower() == "true"
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() in ("1", "true", "yes")
 
@@ -110,6 +110,10 @@ def load_recent_press_releases(csv_path: str, days: int) -> List[Dict[str, Any]]
 def groq_ai_summary(items: List[Dict[str, Any]]) -> str:
     if not items:
         return "No new competitor press releases were detected in the last week."
+
+    if not GROQ_API_KEY:
+        return "(AI summary unavailable — GROQ_API_KEY not configured in environment.)"
+    
     try:
         messages = [
             {"role": "system", "content": (
@@ -127,7 +131,7 @@ def groq_ai_summary(items: List[Dict[str, Any]]) -> str:
         data = r.json()
         return data["choices"][0]["message"]["content"].strip()
     except Exception:
-        return "(AI summary unavailable)\n" + "\n".join([f"• {i['source']}: {i['title']}" for i in items[:8]])
+        return "AI summary unavailable"
 
 
 # --- MICROSOFT GRAPH ---------------------------------------------------------
