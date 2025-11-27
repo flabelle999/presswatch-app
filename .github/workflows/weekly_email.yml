@@ -1,12 +1,24 @@
+name: send-weekly-digest
+
+on:
+  schedule:
+    - cron: "0 14 * * MON"     # every Monday 14:00 UTC (9h QC time)
+  workflow_dispatch:
+
 jobs:
   send-weekly-digest:
     runs-on: ubuntu-latest
 
+    # -------------------------------
+    # ENV VARIABLES (GitHub secrets)
+    # -------------------------------
     env:
       GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
       MS_GRAPH_CLIENT_ID: ${{ secrets.MS_GRAPH_CLIENT_ID }}
       MS_GRAPH_TENANT_ID: ${{ secrets.MS_GRAPH_TENANT_ID }}
       MS_GRAPH_CLIENT_SECRET: ${{ secrets.MS_GRAPH_CLIENT_SECRET }}
+      SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}          # optional
+      GRAPH_SENDER_DISPLAY: ${{ secrets.GRAPH_SENDER_DISPLAY }}  # optional
 
     steps:
       - name: Checkout repository
@@ -20,5 +32,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # -------------------------------
+      # Run your weekly digest script
+      # -------------------------------
       - name: Send weekly digest email
         run: python send_weekly.py
