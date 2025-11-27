@@ -66,7 +66,7 @@ def generate_summary_and_impact(pr_text, company):
 
     # ---- 1. First pass: concise summary ----
     summary_prompt = f"""
-Summarize the following press release in about 3 concise sentences.  Do not start the response by Here is the press release in 3 sentences.  Start with the summary directly.
+Summarize the following press release in one sentence.  Do not start the response by Here is the press release in 3 sentences.  Start with the summary directly.
 
 Press release:
 {pr_text}
@@ -76,7 +76,7 @@ Press release:
     if not summary.strip():
         short_text = pr_text[:8000]
         print("⚠️ Summary was empty — retrying with truncated input.")
-        summary_prompt = f"Summarize this text in 3 sentences:\n\n{short_text}"
+        summary_prompt = f"Summarize this text in one sentence:\n\n{short_text}"
         summary = query_groq(summary_prompt)
 
     # ---- 2. Second pass: impact analysis using the summary ----
@@ -86,8 +86,7 @@ The following is a summarized version of a press release from {company}:
 {summary}
 
 Based on this summary, analyze how this announcement could impact Zhone Technologies —
-competitively, strategically, or technologically.
-Write 3–5 thoughtful sentences focusing on relevance, risks, or opportunities for Zhone.
+respond with a single sentence.
 """
     impact = query_groq(impact_prompt)
 
