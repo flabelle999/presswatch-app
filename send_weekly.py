@@ -33,9 +33,25 @@ MS_TENANT_ID = os.getenv("MS_TENANT_ID")
 MS_CLIENT_ID = os.getenv("MS_CLIENT_ID")
 MS_CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET")
 
-# --- GOOGLE JSON (same as registration.py)
-with open(st.secrets["google"]["service_json_path"]) as f:
-    GOOGLE_SERVICE_JSON = json.load(f)
+# --- UNIVERSAL SECRET LOADER (LOCAL + GITHUB ACTIONS) ---
+def load_google_service_json():
+    # Try st.secrets first
+    try:
+        import streamlit as st
+        path = st.secrets["google"]["service_json_path"]
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        pass
+
+    # Fallback for GitHub Actions
+    service_json_env = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
+    if not service_json_env:
+        raise RuntimeError("GCP_SERVICE_ACCOUNT_JSON not set in GitHub Actions.")
+    return json.loads(service_json_env)
+
+# ✅ GLOBAL VARIABLE — used everywhere in your script
+GOOGLE_SERVICE_JSON = load_google_service_json()
 
 # GROQ (OpenAI-compatible)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
