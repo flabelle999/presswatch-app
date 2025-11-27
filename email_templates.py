@@ -14,7 +14,7 @@ MUTED = "#6b7280"     # muted gray
 
 LOGO_URL = "https://zhone.com/wp-content/themes/dzs/dist/images/logo/logo.png"
 PRESSWATCH_URL = os.getenv("PRESSWATCH_URL", "https://presswatch.example.com")
-UNSUBSCRIBE_URL = os.getenv("UNSUBSCRIBE_URL", "https://presswatch.example.com/unsubscribe")
+UNSUBSCRIBE_URL = os.getenv("UNSUBSCRIBE_URL", "https://flabelle999-presswatch-app-app2-ozc3e2.streamlit.app/unsubscribe")
 
 
 # --- Styling helper ----------------------------------------------------------

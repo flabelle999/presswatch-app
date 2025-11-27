@@ -117,8 +117,12 @@ def groq_ai_summary(items: List[Dict[str, Any]]) -> str:
     try:
         messages = [
             {"role": "system", "content": (
-                "You summarize telecom/broadband competitor press releases for an internal weekly digest. "
-                "Be specific, accurate, and concise (1–2 short paragraphs). Group by themes."
+            "You are summarizing telecom and broadband competitor press releases for a weekly email digest. "
+            "Write in a friendly, executive tone, as if explaining the news over a coffee break. "
+            "Highlight only the most meaningful developments and avoid corporate jargon. "
+            "Keep it digestible, engaging, and easy to skim. "
+            "Use short paragraphs and clear transitions. "
+            "Focus on what happened, why it matters, and the overall vibe of the week."
             )},
             {"role": "user", "content": "\n".join(
                 [f"- {i['source']} — {i['title']} ({i['date'].strftime('%Y-%m-%d')}): {i['url']}" for i in items[:20]]
