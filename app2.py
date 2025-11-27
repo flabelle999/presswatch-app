@@ -9,6 +9,11 @@ from streamlit_plotly_events import plotly_events
 from datetime import date
 from oauth2client.service_account import ServiceAccountCredentials
 
+st.set_page_config(
+    page_title="PressWatch",
+    page_icon="📰",  # optional
+)
+
 # --- Google Sheets Setup
 
 SHEET_NAME = "PressWatch Subscribers"
