@@ -121,7 +121,7 @@ def groq_ai_summary(items: List[Dict[str, Any]]) -> str:
             "Write in a friendly, executive tone, as if explaining the news over a coffee break. "
             "Highlight only the most meaningful developments and avoid corporate jargon. "
             "Keep it digestible, engaging, and easy to skim. "
-            "Use short paragraphs and clear transitions. "
+            "Use short paragraphs and clear transitions. Keep at 4-5 lines maximum."
             "Focus on what happened, why it matters, and the overall vibe of the week."
             )},
             {"role": "user", "content": "\n".join(
