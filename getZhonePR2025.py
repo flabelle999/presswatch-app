@@ -178,8 +178,13 @@ def main():
             except Exception:
                 pass
 
-            # Only include PRs after Jan 1 2025
-            if date_obj and date_obj >= cutoff:
+            if date_obj:
+                # 🚫 If we hit the first pre-2025 PR, stop completely
+                if date_obj < cutoff:
+                    print(f"⏹ Stopping at {title} ({date_str}) — older than 2025 cutoff\n")
+                    break
+
+                # ✅ Only include PRs from 2025+
                 row = {
                     "id": str(uuid.uuid4()),
                     "company": COMPANY,
@@ -191,7 +196,8 @@ def main():
                 rows.append(row)
                 print(f"📰 {title}\n📅 {date_str}\n🔗 {url}\n")
             else:
-                print(f"⏩ Skipping {title} ({date_str}) — before 2025\n")
+                # No usable date → just skip, but keep going
+                print(f"⏩ Skipping {title} — could not parse date: {date_str}\n")
 
             time.sleep(0.8)
         except Exception as e:
