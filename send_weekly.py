@@ -85,7 +85,7 @@ def load_recent_press_releases(csv_path: str, days: int) -> List[Dict[str, Any]]
     if not os.path.exists(csv_path):
         return out
 
-    with open(csv_path, newline="", encoding="cp1252") as f:
+    with open(csv_path, newline="", encoding="cp1252", errors="replace") as f:
         reader = csv.DictReader(f)
         for row in reader:
             title = row.get("title") or row.get("headline") or row.get("Title")
