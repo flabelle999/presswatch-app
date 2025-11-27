@@ -127,83 +127,82 @@ def send_ms_html_email(to_email: str, subject: str, html_body: str):
 def build_thankyou_email(name: str):
     return f"""
     <html>
-    <body style="margin:0;padding:0;background:#f4f4f7;font-family:Arial,Helvetica,sans-serif;">
+      <body style="margin:0;padding:0;background:#f4f4f7;font-family:Arial,Helvetica,sans-serif;">
         <table align="center" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding:30px 0;">
-        <tr>
+          <tr>
             <td align="center">
 
-            <!-- Outer container -->
-            <table width="600" cellpadding="0" cellspacing="0" border="0" 
-                    style="background:#ffffff;border-radius:10px;overflow:hidden;
+              <!-- Outer container -->
+              <table width="600" cellpadding="0" cellspacing="0" border="0" 
+                     style="background:#ffffff;border-radius:10px;overflow:hidden;
                             box-shadow:0 4px 20px rgba(0,0,0,0.08);">
 
                 <!-- Header -->
                 <tr>
-                <td align="center" style="background:#ff8c00;padding:25px 20px;">
+                  <td align="center" style="background:#1E73BE;padding:25px 20px;">
                     <h1 style="margin:0;font-size:26px;font-weight:bold;color:white;">
-                    Welcome to PressWatch
+                      Welcome to PressWatch
                     </h1>
-                </td>
+                  </td>
                 </tr>
 
                 <!-- Body -->
                 <tr>
-                <td style="padding:35px 40px;color:#333333;font-size:16px;line-height:1.6;">
+                  <td style="padding:35px 40px;color:#333333;font-size:16px;line-height:1.6;">
 
                     <p style="font-size:18px;font-weight:bold;margin-top:0;">
-                    Hello {{name}},
+                      Hello {name},
                     </p>
 
                     <p>
-                    Thank you for joining the PressWatch distribution list!
+                      Thank you for joining the PressWatch distribution list!
                     </p>
 
                     <p>
-                    You’ll now receive a clean, curated weekly summary of the
-                    most important telecom press releases — along with a short
-                    analysis of what they mean for Zhone.
+                      You’ll now receive a clean, curated weekly summary of the
+                      most important telecom press releases — along with a short
+                      analysis of what they mean for Zhone.
                     </p>
 
                     <p>
-                    Our goal is to save you time, help you stay informed,
-                    and bring clarity to an ever-changing competitive landscape.
+                      Our goal is to save you time, help you stay informed,
+                      and bring clarity to an ever-changing competitive landscape.
                     </p>
 
                     <!-- CTA Button -->
                     <div style="text-align:center;margin:40px 0 25px 0;">
-                    <a href="https://presswatch.streamlit.app"
-                        style="background:#ff8c00;color:white;padding:14px 28px;
+                      <a href="https://presswatch.streamlit.app"
+                         style="background:#1E73BE;color:white;padding:14px 28px;
                                 border-radius:6px;text-decoration:none;font-weight:bold;
                                 font-size:16px;display:inline-block;">
                         Visit PressWatch
-                    </a>
+                      </a>
                     </div>
 
                     <p style="font-size:13px;color:#777;text-align:center;margin-top:30px;">
-                    You can unsubscribe anytime using the link provided in our emails.
+                      You can unsubscribe anytime using the link provided in our emails.
                     </p>
 
-                </td>
+                  </td>
                 </tr>
 
-            </table>
+              </table>
 
-            <!-- Footer -->
-            <table width="600" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;">
+              <!-- Footer -->
+              <table width="600" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;">
                 <tr>
-                <td style="text-align:center;font-size:11px;color:#999;">
+                  <td style="text-align:center;font-size:11px;color:#999;">
                     © 2025 PressWatch · Competitive Intelligence Automation
-                </td>
+                  </td>
                 </tr>
-            </table>
+              </table>
 
             </td>
-        </tr>
+          </tr>
         </table>
-    </body>
+      </body>
     </html>
     """
-
 
 # ---------------------------------------------------------------------
 # 5️⃣  Streamlit registration form
