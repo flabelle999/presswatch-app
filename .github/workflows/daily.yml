@@ -47,6 +47,18 @@ jobs:
           python getZTEPR2025.py || true
           echo "✅ All scrapers completed."
 
+      - name: Summarize new PRs (summary_ai + impact_for_zhone)
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          echo "Generating AI summaries/impacts for newly discovered PRs..."
+          if [ -f summarize_press_releases_external.py ]; then
+            python summarize_press_releases_external.py
+            echo "✅ Summaries/impacts step completed."
+          else
+            echo "⚠️ summarize_press_releases_external.py not found — skipping."
+          fi
+
       - name: Commit and push updates
         run: |
           git config user.name "github-actions[bot]"
