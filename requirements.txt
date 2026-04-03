@@ -14,6 +14,7 @@ webdriver-manager
 gspread
 google-auth
 oauth2client
+playwright
 
 # ---- Optional visual and helper libs ----
 openpyxl==3.1.5
