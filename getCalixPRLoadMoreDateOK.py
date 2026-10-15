@@ -26,18 +26,25 @@ def save_to_master(df_new):
     if master.empty:
         updated = df_new
     else:
-        merged = pd.merge(df_new, master[["company","title"]],
-                          on=["company","title"], how="left", indicator=True)
-        only_new = merged[merged["_merge"]=="left_only"].drop(columns="_merge")
+        calix = master[master["company"] == COMPANY]
+        known = set(calix["title"].dropna()) | set(calix["link"].dropna())
+        only_new = df_new[~(df_new["title"].isin(known) | df_new["link"].isin(known))]
+        if only_new.empty:
+            print("ℹ️ No new Calix press releases to add.")
+            return
         updated = pd.concat([master, only_new[df_new.columns]], ignore_index=True)
+        df_new = only_new
     updated.to_csv(MASTER_FILE, index=False, encoding="utf-8-sig")
     print(f"✅ Added {len(df_new)} Calix press releases to {MASTER_FILE}")
+    for _, r in df_new.iterrows():
+        print(f"   📰 {r['date']}  {r['title']}")
 
 # ---------- date helpers ----------
 def normalize_date(date_str):
     if not date_str:
         return ""
-    date_str = date_str.strip().replace("Sept", "Sep")
+    # Only shorten a standalone "Sept" — a plain replace() turned "September" into "Sepember"
+    date_str = re.sub(r"\bSept\b\.?", "Sep", date_str.strip())
     for fmt in ("%B %d, %Y", "%b %d, %Y", "%Y-%m-%d"):
         try:
             return datetime.strptime(date_str, fmt).strftime("%Y-%m-%d")
@@ -112,14 +119,19 @@ def main():
         browser.close()
 
     soup = BeautifulSoup(html, "html.parser")
-    cards = soup.select("div.cmp-card")
-    rows = []
+    # Media-library cards plus the "featured" block at the top of the page
+    # (some releases only appear in the featured block).
+    anchors = [c.select_one("a[href^='/press-release/']") for c in soup.select("div.cmp-card")]
+    anchors += soup.select(".cmp-featured-news__card__title a[href]")
+    rows, seen = [], set()
 
-    for c in cards:
-        a = c.select_one("a[href^='/press-release/']")
-        if not a:
+    for a in anchors:
+        if not a or not a.get("href") or "/press-release/20" not in a.get("href"):
             continue
         link = urljoin(BASE, a.get("href"))
+        if link in seen:
+            continue
+        seen.add(link)
         title = a.get_text(strip=True)
 
         date_str = fetch_date_from_detail(link)
