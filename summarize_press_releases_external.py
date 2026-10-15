@@ -13,19 +13,53 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
-def get_pr_text(url):
-    """Fetch and clean the full text content from a press release URL."""
+BROWSER_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/129.0.0.0 Safari/537.36"
+)
+
+
+def _html_to_text(html):
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "noscript"]):
+        tag.extract()
+    return " ".join(soup.stripped_strings)[:30000]
+
+
+def _fetch_with_browser(url):
+    """Fallback for sites that block plain HTTP clients (e.g. ciena.com returns 403)."""
     try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-        for tag in soup(["script", "style", "noscript"]):
-            tag.extract()
-        text = " ".join(soup.stripped_strings)
-        return text[:30000]
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True, args=["--disable-blink-features=AutomationControlled"])
+            page = browser.new_context(user_agent=BROWSER_UA, locale="en-US").new_page()
+            resp = page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(1500)
+            html = page.content()
+            status = resp.status if resp else None
+            browser.close()
+        if status and status >= 400:
+            print(f"❌ Browser fetch of {url} returned HTTP {status}")
+            return ""
+        return _html_to_text(html)
     except Exception as e:
-        print(f"❌ Error fetching {url}: {e}")
+        print(f"❌ Browser fetch failed for {url}: {e}")
         return ""
+
+
+def get_pr_text(url):
+    """Fetch and clean the full text content from a press release URL.
+    Tries plain requests first (fast; required for nokia.com, which blocks headless
+    browsers), then falls back to headless Chromium (required for ciena.com)."""
+    try:
+        response = requests.get(url, timeout=15, headers={"User-Agent": BROWSER_UA})
+        response.raise_for_status()
+        return _html_to_text(response.text)
+    except Exception as e:
+        print(f"⚠️ Plain fetch failed for {url}: {e} — retrying with headless browser")
+        return _fetch_with_browser(url)
 
 
 def query_groq(prompt, model=MODEL_NAME):
