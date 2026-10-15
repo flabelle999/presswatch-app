@@ -1,136 +1,82 @@
 # getCienaPR2025.py
+# Ciena blocks plain HTTP clients (403 Forbidden since ~May 2026), so this
+# scraper loads the newsroom listing in headless Chromium via Playwright and
+# reads the title, link and date directly from the listing (no detail-page hits).
 import os
 import re
-import json
+import sys
 import uuid
-import time
-import requests
 import pandas as pd
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlsplit, urlunsplit
 from datetime import datetime
+from urllib.parse import urljoin, urlsplit, urlunsplit
+from playwright.sync_api import sync_playwright
 
 BASE = "https://www.ciena.com"
-LIST_URL = f"{BASE}/about/newsroom/press-releases/"
+LIST_URL = f"{BASE}/about/newsroom/press-releases?year={{year}}"
 COMPANY = "Ciena"
+TITLE_SUFFIX = " - Ciena"   # matches the format of existing rows in the master CSV
 MASTER_FILE = os.path.join(os.path.dirname(__file__), "press_releases_master.csv")
+CUTOFF = datetime(2025, 1, 1)
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/122.0 Safari/537.36"
-    )
-}
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/129.0.0.0 Safari/537.36"
+)
 
-MONTHS = ("January","February","March","April","May","June",
-          "July","August","September","October","November","December")
-DATE_RE = re.compile(rf"({'|'.join(MONTHS)})\s+\d{{1,2}},\s+\d{{4}}", re.I)
+MONTHS = {m: i for i, m in enumerate(
+    ["jan", "feb", "mar", "apr", "may", "jun",
+     "jul", "aug", "sep", "oct", "nov", "dec"], start=1)}
 
-def normalize_date(s: str) -> str:
-    s = (s or "").strip()
-    # Try ISO first
-    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%B %d, %Y", "%b %d, %Y"):
-        try:
-            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
-        except Exception:
-            pass
-    m = DATE_RE.search(s)
-    if m:
-        return datetime.strptime(m.group(0), "%B %d, %Y").strftime("%Y-%m-%d")
-    return s
 
 def clean_url(u: str) -> str:
     """Strip query/hash to avoid duplicates."""
     p = urlsplit(u)
     return urlunsplit((p.scheme, p.netloc, p.path, "", ""))
 
-def get_press_release_links() -> list:
-    r = requests.get(LIST_URL, headers=HEADERS, timeout=20)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
-    # Grab all newsroom PR links (don’t require .html)
-    anchors = soup.select("a[href*='/about/newsroom/press-releases/']")
-    links = []
-    for a in anchors:
-        href = a.get("href") or ""
-        if "/about/newsroom/press-releases/" in href:
-            # skip the listing root itself
-            if href.rstrip("/").endswith("/about/newsroom/press-releases"):
-                continue
-            full = href if href.startswith("http") else urljoin(BASE, href)
-            links.append(clean_url(full))
-    # de-dupe preserving order
-    seen, out = set(), []
-    for u in links:
-        if u not in seen:
-            seen.add(u)
-            out.append(u)
-    return out
 
-def extract_date_from_detail(url: str) -> str:
-    try:
-        rr = requests.get(url, headers=HEADERS, timeout=20)
-        rr.raise_for_status()
-        s = BeautifulSoup(rr.text, "html.parser")
+def years_to_scrape() -> list:
+    """Current year, plus the previous year (catches late-December releases in January)."""
+    now = datetime.now().year
+    return [y for y in (now, now - 1) if y >= CUTOFF.year]
 
-        # 1) <time> tag
-        t = s.find("time")
-        if t:
-            if t.get("datetime"):
-                d = normalize_date(t["datetime"])
-                if re.match(r"\d{4}-\d{2}-\d{2}", d): return d
-            txt = t.get_text(" ", strip=True)
-            d = normalize_date(txt)
-            if re.match(r"\d{4}-\d{2}-\d{2}", d): return d
 
-        # 2) meta tags
-        for attrs in (
-            {"property": "article:published_time"},
-            {"name": "pubdate"},
-            {"name": "publishdate"},
-            {"name": "date"},
-            {"name": "DC.date.issued"},
-        ):
-            m = s.find("meta", attrs=attrs)
-            if m and m.get("content"):
-                d = normalize_date(m["content"])
-                if re.match(r"\d{4}-\d{2}-\d{2}", d): return d
+def fetch_listing_html(page, year: int) -> str:
+    url = LIST_URL.format(year=year)
+    resp = page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    status = resp.status if resp else None
+    if status != 200:
+        raise RuntimeError(f"{url} returned HTTP {status}")
+    page.wait_for_selector("li.pr-list__item", timeout=30000)
+    return page.content()
 
-        # 3) JSON-LD
-        for sc in s.find_all("script", type="application/ld+json"):
-            try:
-                data = json.loads(sc.string or "")
-                objs = data if isinstance(data, list) else [data]
-                for obj in objs:
-                    if isinstance(obj, dict):
-                        for key in ("datePublished", "dateCreated", "dateModified"):
-                            if obj.get(key):
-                                d = normalize_date(str(obj[key]))
-                                if re.match(r"\d{4}-\d{2}-\d{2}", d): return d
-            except Exception:
-                pass
 
-        # 4) visible text fallback
-        text = s.get_text(" ", strip=True)
-        m = DATE_RE.search(text)
-        if m:
-            return normalize_date(m.group(0))
-    except Exception:
-        pass
-    return ""
+def parse_listing(html: str, year: int) -> list:
+    """Each item: <li class='pr-list__item'><a href=...> <p>DD</p><p>Mon</p> <p class='pr-link-text'>Title</p>"""
+    soup = BeautifulSoup(html, "html.parser")
+    rows = []
+    for li in soup.select("li.pr-list__item"):
+        a = li.find("a", href=True)
+        if not a:
+            continue
+        title_el = a.select_one(".pr-link-text")
+        day_el = a.select_one(".cn-display-3")
+        mon_el = a.select_one(".cn-subhead-3")
+        if not (title_el and day_el and mon_el):
+            continue
+        title = " ".join(title_el.get_text(" ", strip=True).split())
+        try:
+            month = MONTHS[mon_el.get_text(strip=True)[:3].lower()]
+            dt = datetime(year, month, int(day_el.get_text(strip=True)))
+        except (KeyError, ValueError):
+            print(f"⚠️ Could not parse date for: {title}")
+            continue
+        link = a["href"]
+        link = clean_url(link if link.startswith("http") else urljoin(BASE, link))
+        rows.append({"title": title, "link": link, "dt": dt})
+    return rows
 
-def extract_title_from_detail(url: str) -> str:
-    try:
-        rr = requests.get(url, headers=HEADERS, timeout=20)
-        rr.raise_for_status()
-        s = BeautifulSoup(rr.text, "html.parser")
-        h = s.find(["h1","h2","title"])
-        if h:
-            return h.get_text(" ", strip=True)
-    except Exception:
-        pass
-    return "(No title)"
 
 def load_master():
     if os.path.exists(MASTER_FILE):
@@ -139,60 +85,72 @@ def load_master():
         except UnicodeDecodeError:
             # fallback if file was created or edited in Excel/Windows
             return pd.read_csv(MASTER_FILE, encoding="latin-1")
-    return pd.DataFrame(columns=["id","company","title","link","date","fetched_at"])
+    return pd.DataFrame(columns=["id", "company", "title", "link", "date", "fetched_at"])
+
+
+def norm_title(t: str) -> str:
+    t = str(t or "").strip()
+    if t.endswith(TITLE_SUFFIX):
+        t = t[: -len(TITLE_SUFFIX)]
+    return " ".join(t.split()).lower()
+
 
 def save_to_master(df_new):
-    if df_new.empty:
-        print("ℹ️ No new press releases to add.")
-        return
     master = load_master()
-    if master.empty:
-        updated = df_new
-    else:
-        merged = pd.merge(df_new, master[["company", "title"]],
-                          on=["company", "title"], how="left", indicator=True)
-        only_new = merged[merged["_merge"] == "left_only"].drop(columns="_merge")
-        updated = pd.concat([master, only_new[df_new.columns]], ignore_index=True)
+    if not master.empty:
+        ciena = master[master["company"] == COMPANY]
+        known_links = set(ciena["link"].dropna().map(clean_url))
+        known_titles = set(ciena["title"].dropna().map(norm_title))
+        mask = ~(df_new["link"].isin(known_links) | df_new["title"].map(norm_title).isin(known_titles))
+        df_new = df_new[mask]
+    if df_new.empty:
+        print("ℹ️ No new Ciena press releases to add.")
+        return
+    updated = pd.concat([master, df_new], ignore_index=True) if not master.empty else df_new
     updated.to_csv(MASTER_FILE, index=False, encoding="utf-8-sig")
     print(f"✅ Added {len(df_new)} {COMPANY} press releases to {MASTER_FILE}")
 
+
 def main():
-    cutoff = datetime(2025, 1, 1)
-    print(f"Fetching list: {LIST_URL}")
-    links = get_press_release_links()
-    print(f"Found {len(links)} candidate links\n")
+    items = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=True, args=["--disable-blink-features=AutomationControlled"])
+        context = browser.new_context(
+            user_agent=USER_AGENT, locale="en-US", viewport={"width": 1366, "height": 900})
+        page = context.new_page()
+        for year in years_to_scrape():
+            print(f"Fetching list: {LIST_URL.format(year=year)}")
+            try:
+                found = parse_listing(fetch_listing_html(page, year), year)
+            except Exception as e:
+                print(f"❌ Ciena listing for {year} failed: {e}")
+                continue
+            print(f"  Found {len(found)} items for {year}")
+            items.extend(found)
+        browser.close()
 
-    rows = []
-    for url in links:
-        date_str = extract_date_from_detail(url)
-        title = extract_title_from_detail(url)
+    if not items:
+        print("❌ No Ciena press releases retrieved — the site may be blocking the scraper.")
+        sys.exit(1)
 
-        # Parse date and filter 2025+
-        try:
-            dt = datetime.strptime(date_str, "%Y-%m-%d")
-        except Exception:
-            dt = None
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    rows, seen = [], set()
+    for it in items:
+        if it["dt"] < CUTOFF or it["link"] in seen:
+            continue
+        seen.add(it["link"])
+        rows.append({
+            "id": str(uuid.uuid4()),
+            "company": COMPANY,
+            "title": it["title"] + TITLE_SUFFIX,
+            "link": it["link"],
+            "date": it["dt"].strftime("%Y-%m-%d"),
+            "fetched_at": now,
+        })
 
-        if dt and dt >= cutoff:
-            rows.append({
-                "id": str(uuid.uuid4()),
-                "company": COMPANY,
-                "title": title,
-                "link": url,
-                "date": date_str,
-                "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
-            print(f"📰 {title}\n📅 {date_str}\n🔗 {url}\n")
-        else:
-            print(f"⏩ Skipping {title} ({date_str or 'no date'}) — before 2025 or undated\n")
+    save_to_master(pd.DataFrame(rows))
 
-        time.sleep(0.3)
-
-    if rows:
-        df_new = pd.DataFrame(rows)
-        save_to_master(df_new)
-    else:
-        print("No press releases fetched after Jan 1 2025.")
 
 if __name__ == "__main__":
     main()
