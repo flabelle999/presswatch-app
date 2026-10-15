@@ -55,7 +55,8 @@ GOOGLE_SERVICE_JSON = load_google_service_json()
 
 # GROQ (OpenAI-compatible)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+# llama-3.3-70b-versatile was retired by Groq on 2026-08-16 — see console.groq.com/docs/deprecations
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 GROQ_URL = os.getenv("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
 
 # Options
@@ -129,12 +130,24 @@ def groq_ai_summary(items: List[Dict[str, Any]]) -> str:
             )},
         ]
         headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-        payload = {"model": GROQ_MODEL, "messages": messages, "temperature": 0.3, "max_tokens": 350}
+        # gpt-oss is a reasoning model: reasoning tokens count against max_tokens,
+        # so keep reasoning low and leave headroom for the visible answer.
+        payload = {"model": GROQ_MODEL, "messages": messages, "temperature": 0.3, "max_tokens": 1500}
+        if GROQ_MODEL.startswith("openai/gpt-oss"):
+            payload["reasoning_effort"] = "low"
         r = requests.post(GROQ_URL, headers=headers, data=json.dumps(payload), timeout=60)
-        r.raise_for_status()
+        if r.status_code != 200:
+            print(f"::warning::Groq API error {r.status_code} (model={GROQ_MODEL}): {r.text[:500]}")
+            r.raise_for_status()
         data = r.json()
-        return data["choices"][0]["message"]["content"].strip()
-    except Exception:
+        content = (data["choices"][0]["message"].get("content") or "").strip()
+        if not content:
+            print(f"::warning::Groq returned an empty summary (model={GROQ_MODEL}, "
+                  f"finish_reason={data['choices'][0].get('finish_reason')})")
+            return "AI summary unavailable"
+        return content
+    except Exception as e:
+        print(f"::warning::AI summary failed: {e}")
         return "AI summary unavailable"
 
 

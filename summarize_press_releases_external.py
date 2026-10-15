@@ -7,7 +7,8 @@ import json
 import chardet
 
 CSV_FILE = "press_releases_master.csv"
-MODEL_NAME = "llama-3.3-70b-versatile"
+# llama-3.3-70b-versatile was retired by Groq on 2026-08-16 — see console.groq.com/docs/deprecations
+MODEL_NAME = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -41,13 +42,16 @@ def query_groq(prompt, model=MODEL_NAME):
         data = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 800,
+            "max_tokens": 1500,
         }
+        # gpt-oss is a reasoning model: keep reasoning low so the answer isn't truncated
+        if model.startswith("openai/gpt-oss"):
+            data["reasoning_effort"] = "low"
         r = requests.post(GROQ_URL, headers=headers, json=data, timeout=60)
         result = r.json()
 
         if "choices" in result:
-            reply = result["choices"][0]["message"]["content"].strip()
+            reply = (result["choices"][0]["message"].get("content") or "").strip()
             print(f"✅ Groq returned: {reply[:200]}...\n")
             return reply
         else:
