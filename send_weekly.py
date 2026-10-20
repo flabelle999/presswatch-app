@@ -108,6 +108,14 @@ def load_recent_press_releases(csv_path: str, days: int) -> List[Dict[str, Any]]
     return out
 
 
+def _limit_sentences(text: str, max_sentences: int = 2) -> str:
+    """Safety net in case the model ignores the length limit: keep the first N sentences."""
+    import re
+    flat = " ".join(text.split())  # collapse line breaks / extra paragraphs
+    sentences = re.split(r"(?<=[.!?])\s+", flat)
+    return " ".join(sentences[:max_sentences]).strip()
+
+
 def groq_ai_summary(items: List[Dict[str, Any]]) -> str:
     if not items:
         return "No new competitor press releases were detected in the last week."
@@ -122,8 +130,9 @@ def groq_ai_summary(items: List[Dict[str, Any]]) -> str:
             "Write in a friendly, executive tone, as if explaining the news over a coffee break. "
             "Highlight only the most meaningful developments and avoid corporate jargon. "
             "Keep it digestible, engaging, and easy to skim. "
-            "Use short paragraphs and clear transitions. Keep at 4-5 lines maximum."
-            "Focus on what happened, why it matters, and the overall vibe of the week."
+            "Focus on what happened and why it matters. "
+            "LENGTH LIMIT: at most 2 sentences and 45 words in total, written as a single paragraph. "
+            "Do not open with a greeting or filler such as 'Exciting week in telecom' — start directly with the news."
             )},
             {"role": "user", "content": "\n".join(
                 [f"- {i['source']} — {i['title']} ({i['date'].strftime('%Y-%m-%d')}): {i['url']}" for i in items[:20]]
@@ -145,7 +154,7 @@ def groq_ai_summary(items: List[Dict[str, Any]]) -> str:
             print(f"::warning::Groq returned an empty summary (model={GROQ_MODEL}, "
                   f"finish_reason={data['choices'][0].get('finish_reason')})")
             return "AI summary unavailable"
-        return content
+        return _limit_sentences(content, 2)
     except Exception as e:
         print(f"::warning::AI summary failed: {e}")
         return "AI summary unavailable"
